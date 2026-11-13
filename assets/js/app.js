@@ -45,7 +45,7 @@
   function rowsFor(sem, jenjang, jurusan) {
     return Data.prodiList()
       .filter(p => (jenjang === "all" || p.jenjang === jenjang) && (jurusan === "all" || p.jurusan === jurusan))
-      .map(p => { const rec = Data.get(sem, p.id); return { p, rec, m: rec ? metrics(rec.payload) : null }; });
+      .map(p => { const rec = Data.get(sem, p.id); return { p, rec, m: rec ? metrics(rec.payload, sem) : null }; });
   }
   function aggregate(rows) {
     const r = rows.filter(x => x.m);
@@ -291,7 +291,7 @@
     if (prevSem) { try { await Data.loadSemester(prevSem); } catch (e) {} }
     const rec = Data.get(state.sem, id);
     const prev = prevSem ? Data.get(prevSem, id) : null;
-    const m = rec ? metrics(rec.payload) : null, pm = prev ? metrics(prev.payload) : null;
+    const m = rec ? metrics(rec.payload, state.sem) : null, pm = prev ? metrics(prev.payload, Data.previousSemester(state.sem)) : null;
     const sem = Data.semester(state.sem);
     const sems = C.semester.map(s => `<option value="${s.id}" ${s.id === state.sem ? "selected" : ""}>${s.label}</option>`).join("");
     const sesNow = Session.get();
@@ -320,7 +320,7 @@
       ${kpiCard("Rata-rata IPK", fmt(m.ipkAvg, 2), `IPS ${fmt(m.ipsAvg, 2)}` + delta(m.ipkAvg, pm && pm.ipkAvg, 2), cls(m.ipkAvg, 3.5, A.ipkMin))}
       ${kpiCard("UKT lunas", fmt(m.uktPct, 2) + "%", `${fmt(m.totalMhs, 0)} mahasiswa`, cls(m.uktPct, 100, 98))}
       ${kpiCard("Berhenti / Pindah", m.keluar, `Cuti ${m.cuti}` + delta(m.keluar, pm && pm.keluar, 0, true), cls(m.keluarPct, 0, 2, "turun"))}
-      ${kpiCard("Lulus tepat waktu", fmt(m.tepatWaktu, 1) + "%", m.totalLulusan ? `${m.totalLulusan} lulusan` : "Tidak diisi", cls(m.tepatWaktu, 95, 85))}
+      ${kpiCard("Lulus tepat waktu", fmt(m.tepatWaktu, 1) + "%", m.lulusFormatLama ? "Format lama (gabungan beberapa tahun)" : m.totalLulusan ? `${m.totalLulusan} lulusan (${window.MONEV.labelLulus(state.sem)})` : m.lulusDiisi ? "Tidak ada lulusan semester ini" : "Tidak diisi", cls(m.tepatWaktu, 95, 85))}
       ${kpiCard("Rasio dosen", m.rasio ? "1:" + fmt(m.rasio) : "-", `Ideal 1:27 s.d. 1:30 · Capaian ${m.rasioCapaian !== null ? m.rasioCapaian + "%" : "-"}`, m.rasioCapaian === null ? "" : m.rasioCapaian === 100 ? "good" : m.rasioCapaian >= 75 ? "warn" : "bad")}
       ${kpiCard("Kelengkapan isian", m.kelengkapan + "%", `${m.flags.length} temuan`, cls(m.kelengkapan, 90, 70))}
     </div>
@@ -434,7 +434,7 @@
       <div><h3>H. Evaluasi hasil belajar ${ev.varian === "profesi" ? '<span class="badge b-kmk">varian profesi</span>' : ""}</h3>${tbl(["Aspek", "Status", "Keterangan"], evItems.map((it, i) => [esc(it), stBadge(ev.status && ev.status[i]), esc(ev.ket && ev.ket[i])]))}</div></div>`);
     t.push(`<h3>G. Kendala pelaksanaan pembelajaran</h3>${tbl(["Jenis kendala", "Mata kuliah terdampak", "Uraian"], KENDALA.map(k => { const x = (P.kendala || {})[k.id] || {}; return [k.label, esc(x.mk), esc(x.uraian) || '<span class="muted">–</span>']; }))}`);
     t.push(`<div class="grid g2"><div><h3>Rekapitulasi IPS, IPK, dan Hasil Try Out/Uji Kompetensi</h3>${tbl(["Angkatan", "IPS", "IPK", "Try Out/Uji Kompetensi (%)", "Kendala"], (P.ipk || []).map(r => [esc(r.angkatan), fmt(r.ips, 2), fmt(r.ipk, 2), r.ukom === null ? "–" : fmt(r.ukom, 2), esc(r.kendala)]), [1, 2, 3])}</div>
-      <div><h3>Kelulusan tepat waktu</h3>${tbl(["Tahun", "Jumlah lulusan", "Lulus tepat waktu", "Persentase (%)", "Keterangan"], (P.lulus || []).map(r => [esc(r.tahun), r.jumlah, r.tepat, r.jumlah ? fmt(r.tepat / r.jumlah * 100, 2) + "%" : "–", esc(r.ket)]), [1, 2, 3])}</div></div>`);
+      <div><h3>Kelulusan tepat waktu</h3>${m.lulusFormatLama ? `<p class="hint">Format lama: diisi beberapa tahun/angkatan, belum berupa lulusan ${esc(window.MONEV.labelLulus(state.sem))}. Perbaiki melalui usulan perbaikan data.</p>` : ""}${tbl(["Tahun lulus (yudisium)", "Jumlah lulusan", "Lulus tepat waktu", "Persentase (%)", "Keterangan"], (P.lulus || []).map(r => [esc(r.tahun), r.jumlah, r.tepat, r.jumlah ? fmt(r.tepat / r.jumlah * 100, 2) + "%" : "–", esc(r.ket)]), [1, 2, 3])}</div></div>`);
     t.push(`<h3>I. Keterkaitan dengan KPI institusi 2026</h3>${tbl(["Kode", "Indikator", "Target (program studi)", "Realisasi (program studi)", "Target institusi", "Nilai terhitung"], Object.keys(T).map(k => { const x = (P.kpi || {})[k] || {}; const v = { ukom: m.ukom, tepatWaktu: m.tepatWaktu, rasio: m.rasio, inggris: m.inggris, prestasi: m.prestasi, akreditasi: m.akreditasi }[k];
       return [T[k].kode, T[k].label, esc(x.target) || "-", esc(x.real) || "-", k === "rasio" ? "1:" + T[k].target : T[k].target + (T[k].satuan === "%" ? "%" : ""), v === null || v === undefined ? "-" : k === "rasio" ? "1:" + fmt(v) + (m.rasioCapaian !== null ? " (capaian " + m.rasioCapaian + "%)" : "") : typeof v === "number" ? fmt(v) + (T[k].satuan === "%" ? "%" : "") : esc(v)]; }))}`);
     t.push(`<h3>J. Rekomendasi / tindak lanjut</h3>${tbl(["No", "Permasalahan / temuan", "Rekomendasi / tindak lanjut", "Tema"], (P.rekomendasi || []).map((r, i) => [i + 1, esc(r[0]), esc(r[1]), `<span class="badge b-kmk">${(TEMA.find(x => x.id === temaOf(r[0] + " " + r[1])) || {}).label}</span>`]))}`);
@@ -579,6 +579,7 @@
         <li>Buka menu <b>Pengisian Instrumen</b>, pilih program studi, lalu ${Api.enabled() ? "masuk dengan <b>NIP</b> Anda dan <b>PIN</b> dari Pusbangdik" : "isi formulir (mode lokal)"}.</li>
         <li>Gunakan <b>Salin daftar mata kuliah</b> atau <b>Tempel dari Excel</b> untuk tabel kehadiran yang panjang.</li>
         <li>Isi angka mentah (jumlah dosen, mahasiswa, peserta dan lulusan Uji Kompetensi); persentase dan rasio dihitung otomatis.</li>
+        <li><b>Kelulusan tepat waktu</b> diisi dengan lulusan yang yudisium pada semester yang dilaporkan, kapan pun wisudanya (Semester Genap 2025/2026 = tahun lulus 2026). Jangan isi tahun masuk atau angkatan tahun sebelumnya.</li>
         <li>Isi <b>Bagian K</b>: status tindak lanjut setiap rekomendasi semester lalu.</li>
         <li>Tempel tautan Google Drive bukti dukung di <b>Bagian M</b> (atur akses "Siapa saja di Poltekkes yang memiliki link").</li>
         <li><b>Simpan draf</b> kapan saja; <b>Kirim versi final</b> setelah Ketua Jurusan memeriksa isian dan memberi catatan (melalui Dashboard Program Studi).</li>
