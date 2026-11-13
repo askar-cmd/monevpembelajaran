@@ -32,7 +32,7 @@
       rps: { status: Array(6).fill(null), ket: Array(6).fill("") },
       kendala: Object.fromEntries(KENDALA.map(k => [k.id, { mk: "", uraian: "" }])),
       evaluasi: p.jenjang === "Profesi" ? { varian: "profesi", item: EVAL_PROFESI.slice(), status: Array(8).fill(null), ket: Array(8).fill("") } : { varian: "reguler", status: Array(6).fill(null), ket: Array(6).fill("") },
-      ipk: [], lulusBaru: { jumlah: "", tepat: "", ket: "" }, lulusLama: [], kpiInput: { ukomPeserta: "", ukomLulus: "", akreditasi: "", ukomKet: "" },
+      ipk: [], lulusBaru: { jumlah: "", tepat: "", ket: "" }, lulusRpl: { jumlah: "", tepat: "", masaStudi: "", ket: "" }, lulusLama: [], kpiInput: { ukomPeserta: "", ukomLulus: "", akreditasi: "", ukomKet: "" },
       rekomendasi: [], tindakLanjut: [],
       tambahan: { dosenTetap: "", mhsAktif: "", dosenInggris: "", mkTotal: "", mkEdlink: "", edom: "", edomResponden: "", dosenObe: "" },
       bukti: {}
@@ -53,9 +53,13 @@
     f.ipk = (P.ipk || []).map(x => Object.assign({}, x));
     /* kelulusan: hanya baris tahun lulus semester ini yang dipakai; baris lain (format lama) disimpan terpisah sebagai jejak */
     const kunci = M.tahunLulus(sem), semua = (P.lulus || []).concat(P.lulusLama || []);
-    const cocok = semua.find(x => String(x.tahun).trim() === kunci);
-    if (cocok) f.lulusBaru = { jumlah: cocok.jumlah === null || cocok.jumlah === undefined ? "" : cocok.jumlah, tepat: cocok.tepat === null || cocok.tepat === undefined ? "" : cocok.tepat, ket: cocok.ket || "" };
-    f.lulusLama = semua.filter(x => x !== cocok && (x.tahun || num(x.jumlah) !== null)).map(x => Object.assign({}, x));
+    /* dua jalur: Reguler dan RPL (Rekognisi Pembelajaran Lampau); baris tahun ini tanpa keterangan jalur dianggap Reguler */
+    const kini = semua.filter(x => String(x.tahun).trim() === kunci);
+    const reg = kini.find(x => x.jalur !== "RPL"), rpl = kini.find(x => x.jalur === "RPL");
+    const v = x => x === null || x === undefined ? "" : x;
+    if (reg) f.lulusBaru = { jumlah: v(reg.jumlah), tepat: v(reg.tepat), ket: reg.ket || "" };
+    if (rpl) f.lulusRpl = { jumlah: v(rpl.jumlah), tepat: v(rpl.tepat), masaStudi: v(rpl.masaStudi), ket: rpl.ket || "" };
+    f.lulusLama = semua.filter(x => x !== reg && x !== rpl && (x.tahun || num(x.jumlah) !== null)).map(x => Object.assign({}, x));
     if (P.kpiInput) f.kpiInput = Object.assign(f.kpiInput, P.kpiInput);
     f.rekomendasi = (P.rekomendasi || []).map(r => ({ masalah: r[0], tindak: r[1] }));
     f.tindakLanjut = (P.tindakLanjut || []).map(x => Object.assign({}, x));
@@ -67,7 +71,7 @@
     const t = f.tambahan, k = f.kpiInput;
     const dt = num(t.dosenTetap), ma = num(t.mhsAktif), di = num(t.dosenInggris);
     const up = num(k.ukomPeserta), ul = num(k.ukomLulus);
-    const lj = num(f.lulusBaru.jumlah) || 0, lt = num(f.lulusBaru.tepat) || 0;
+    const lj = (num(f.lulusBaru.jumlah) || 0) + (num(f.lulusRpl.jumlah) || 0), lt = (num(f.lulusBaru.tepat) || 0) + (num(f.lulusRpl.tepat) || 0);
     return {
       rasio: dt && ma ? ma / dt : null, inggris: dt && di !== null ? di / dt * 100 : null,
       ukom: up ? (ul || 0) / up * 100 : null, tepat: lj ? lt / lj * 100 : null,
@@ -87,7 +91,9 @@
       retensi: f.retensi.filter(r => r.angkatan).map(r => ({ angkatan: r.angkatan, cuti: num(r.cuti) || 0, do: num(r.do) || 0, skors: num(r.skors) || 0, pindah: num(r.pindah) || 0, ket: r.ket || "" })),
       rps: f.rps, kendala: f.kendala, evaluasi: f.evaluasi,
       ipk: f.ipk.filter(r => r.angkatan).map(r => ({ angkatan: r.angkatan, ips: num(r.ips), ipk: num(r.ipk), ukom: num(r.ukom), kendala: r.kendala || "" })),
-      lulus: num(f.lulusBaru.jumlah) === null ? [] : [{ tahun: M.tahunLulus(sem), jumlah: num(f.lulusBaru.jumlah), tepat: num(f.lulusBaru.jumlah) === 0 ? 0 : num(f.lulusBaru.tepat), ket: f.lulusBaru.ket || "" }],
+      lulus: [].concat(
+        num(f.lulusBaru.jumlah) === null ? [] : [{ tahun: M.tahunLulus(sem), jalur: "Reguler", jumlah: num(f.lulusBaru.jumlah), tepat: num(f.lulusBaru.jumlah) === 0 ? 0 : num(f.lulusBaru.tepat), ket: f.lulusBaru.ket || "" }],
+        num(f.lulusRpl.jumlah) === null ? [] : [{ tahun: M.tahunLulus(sem), jalur: "RPL", jumlah: num(f.lulusRpl.jumlah), tepat: num(f.lulusRpl.jumlah) === 0 ? 0 : num(f.lulusRpl.tepat), masaStudi: num(f.lulusRpl.masaStudi), ket: f.lulusRpl.ket || "" }]),
       /* isian format lama ikut tersimpan pada draf sebagai jejak, dan dilepas saat kirim final / usulan perbaikan */
       ...(!kirim && f.lulusLama.length ? { lulusLama: f.lulusLama } : {}),
       kpiInput: f.kpiInput,
@@ -227,8 +233,11 @@
         `<div class="tbl-wrap"><table class="tbl-edit"><thead><tr><th>No</th><th>Aspek yang dimonitor</th><th style="width:190px">Status</th><th>Keterangan</th></tr></thead><tbody>
         ${EV.map((it, i) => `<tr><td class="c">${i + 1}</td><td>${esc(it)}</td><td>${statusRadios("eval", i, F.evaluasi.status[i])}</td><td><input data-sk="eval" data-i="${i}" value="${esc(F.evaluasi.ket[i] || "")}"></td></tr>`).join("")}</tbody></table></div>` + bukti("H") +
         `<h3 style="margin-top:16px">Rekapitulasi IPS, IPK, dan Hasil Try Out/Uji Kompetensi</h3>` + tableEditor("ipk", COLS.ipk) + bukti("ipk") +
-        `<h3 style="margin-top:16px">Kelulusan tepat waktu</h3><p class="hint">Isi <b>${esc(M.keteranganLulus(sem))}</b>. Jangan isi tahun masuk atau angkatan tahun sebelumnya. Tepat waktu = lulus dalam masa studi normal: D-III paling lama 6 semester, Sarjana Terapan paling lama 8 semester, Profesi sesuai masa studi program. Isi 0 bila tidak ada lulusan pada semester ini.</p>
-        <div class="fgrid">${inp("lulusBaru.jumlah", "Jumlah lulusan (" + esc(M.labelLulus(sem)) + ")", "number", 'min="0"')}${inp("lulusBaru.tepat", "Lulus tepat waktu", "number", 'min="0"')}${inp("lulusBaru.ket", "Keterangan (mis. penyebab tidak tepat waktu)")}</div><p class="hint" id="lulusCalc"></p>` +
+        `<h3 style="margin-top:16px">Kelulusan tepat waktu</h3><p class="hint">Isi <b>${esc(M.keteranganLulus(sem))}</b>. Jangan isi tahun masuk atau angkatan tahun sebelumnya. Lulusan <b>Reguler</b> dan lulusan <b>RPL</b> (Rekognisi Pembelajaran Lampau) diisi terpisah. Tepat waktu = lulus dalam masa studi normal: Reguler D-III paling lama 6 semester, Sarjana Terapan paling lama 8 semester, Profesi sesuai masa studi program; RPL sesuai masa studi program RPL di program studi ini (mis. 2, 3, atau 4 semester).</p>
+        <h4 style="margin:10px 0 4px">Lulusan Reguler</h4><p class="hint">Isi 0 bila tidak ada lulusan reguler pada semester ini.</p>
+        <div class="fgrid">${inp("lulusBaru.jumlah", "Jumlah lulusan Reguler (" + esc(M.labelLulus(sem)) + ")", "number", 'min="0"')}${inp("lulusBaru.tepat", "Lulus tepat waktu (Reguler)", "number", 'min="0"')}${inp("lulusBaru.ket", "Keterangan (mis. penyebab tidak tepat waktu)")}</div>
+        <h4 style="margin:12px 0 4px">Lulusan RPL</h4><p class="hint">Kosongkan bila program studi tidak menyelenggarakan RPL; isi 0 bila ada program RPL tetapi tidak ada lulusan pada semester ini.</p>
+        <div class="fgrid">${inp("lulusRpl.jumlah", "Jumlah lulusan RPL (" + esc(M.labelLulus(sem)) + ")", "number", 'min="0"')}${inp("lulusRpl.tepat", "Lulus tepat waktu (RPL)", "number", 'min="0"')}${inp("lulusRpl.masaStudi", "Masa studi normal RPL (semester)", "number", 'min="1" max="8"')}${inp("lulusRpl.ket", "Keterangan RPL")}</div><p class="hint" id="lulusCalc"></p>` +
         (F.lulusLama.length ? `<div class="notice warn" id="lulusLamaBox" style="margin-top:10px"><b>Isian kelulusan format lama</b> (tidak dihitung dan dilepas saat dikirim): ${F.lulusLama.map(r => `${esc(r.tahun || "tanpa tahun")}: ${fmt(num(r.jumlah), 0)} lulusan, ${fmt(num(r.tepat), 0)} tepat waktu`).join("; ")}. Isi kembali kotak di atas dengan data ${esc(M.keteranganLulus(sem))}.</div>` : "") + bukti("lulus"))}
       ${sec("I", "Keterkaitan dengan KPI Institusi 2026", "Isi angka mentah; capaian dihitung otomatis dan dibandingkan dengan target institusi (bukan target yang diketik program studi).",
         `<div class="fgrid">
@@ -267,7 +276,11 @@
       <tr><td>${T.akreditasi.kode}</td><td>${T.akreditasi.label}</td><td class="num">Unggul</td><td class="num">${esc(F.kpiInput.akreditasi || "–")}</td></tr></tbody></table></div>`;
     const u = $("#uktCalc");
     if (u) { const j = F.ukt.reduce((s, r) => s + (num(r.jumlah) || 0), 0), l = F.ukt.reduce((s, r) => s + (num(r.lunas) || 0), 0); u.textContent = j ? `Total ${j} mahasiswa, ${l} lunas (${fmt(l / j * 100, 2)}%).` : ""; }
-    const lu = $("#lulusCalc"); if (lu) { const j = num(F.lulusBaru.jumlah), t = num(F.lulusBaru.tepat); lu.textContent = j === null ? "" : j === 0 ? "Tidak ada lulusan pada semester ini." : (t || 0) > j ? "Periksa kembali: lulus tepat waktu melebihi jumlah lulusan." : `${fmt(t || 0, 0)} dari ${fmt(j, 0)} lulusan tepat waktu (${fmt((t || 0) / j * 100, 2)}%).`; }
+    const lu = $("#lulusCalc"); if (lu) {
+      const bag = (o, nm) => { const j = num(o.jumlah), t = num(o.tepat); return j === null ? "" : j === 0 ? `${nm}: tidak ada lulusan.` : (t || 0) > j ? `${nm}: periksa kembali, lulus tepat waktu melebihi jumlah lulusan.` : `${nm}: ${fmt(t || 0, 0)} dari ${fmt(j, 0)} tepat waktu (${fmt((t || 0) / j * 100, 2)}%).`; };
+      const parts = [bag(F.lulusBaru, "Reguler"), bag(F.lulusRpl, "RPL")].filter(Boolean);
+      const c2 = computed(F); if (c2.tepat !== null && parts.length > 1) parts.push(`Gabungan (dipakai untuk indikator KPI): ${fmt(c2.tepat, 2)}%.`);
+      lu.textContent = parts.join(" "); }
     const lc = $("#lCalc"); if (lc) lc.textContent = c.edlink === null ? "" : `Pemanfaatan Edlink: ${fmt(c.edlink, 1)}% mata kuliah.`;
   }
 
@@ -325,9 +338,14 @@
     if (num(F.tambahan.dosenInggris) > num(F.tambahan.dosenTetap)) e.push("I — dosen berkemampuan Bahasa Inggris melebihi jumlah dosen tetap");
     if (num(F.kpiInput.ukomLulus) > (num(F.kpiInput.ukomPeserta) || 0)) e.push("I — lulus Uji Kompetensi melebihi jumlah peserta");
     { const j = num(F.lulusBaru.jumlah), t = num(F.lulusBaru.tepat), th = M.labelLulus(sem);
-      if (j === null) e.push(`H — kelulusan tepat waktu: isi jumlah lulusan ${th} (isi 0 bila tidak ada lulusan)`);
-      else if (j > 0 && t === null) e.push(`H — kelulusan tepat waktu: isi jumlah lulus tepat waktu`);
-      else if (t > j) e.push("H — kelulusan tepat waktu: lulus tepat waktu melebihi jumlah lulusan"); }
+      if (j === null) e.push(`H — kelulusan tepat waktu: isi jumlah lulusan Reguler ${th} (isi 0 bila tidak ada lulusan)`);
+      else if (j > 0 && t === null) e.push(`H — kelulusan tepat waktu: isi jumlah lulus tepat waktu (Reguler)`);
+      else if (t > j) e.push("H — kelulusan tepat waktu: lulus tepat waktu Reguler melebihi jumlah lulusan");
+      const jr = num(F.lulusRpl.jumlah), tr = num(F.lulusRpl.tepat);
+      if (jr === null && (tr !== null || num(F.lulusRpl.masaStudi) !== null)) e.push("H — kelulusan RPL: isi jumlah lulusan RPL (isi 0 bila tidak ada lulusan)");
+      if (jr > 0 && tr === null) e.push("H — kelulusan RPL: isi jumlah lulus tepat waktu (RPL)");
+      if (jr > 0 && !num(F.lulusRpl.masaStudi)) e.push("H — kelulusan RPL: isi masa studi normal RPL (semester)");
+      if (jr !== null && tr > jr) e.push("H — kelulusan RPL: lulus tepat waktu melebihi jumlah lulusan RPL"); }
     if (num(F.tambahan.mkEdlink) > (num(F.tambahan.mkTotal) || 0)) e.push("L — mata kuliah aktif di Edlink melebihi jumlah mata kuliah");
     F.tindakLanjut.forEach((r, i) => { if (r.status === "Selesai" && !r.bukti) e.push(`K — butir ${i + 1} Selesai: lampirkan tautan bukti`); });
     /* Tautan bukti dukung tidak diwajibkan sampai ada perintah lebih lanjut */
@@ -356,7 +374,7 @@
     const evItems = (payload.evaluasi && payload.evaluasi.item) || M.EVAL_ITEM;
     sheets.push({ name: "H_Evaluasi", rows: [["Aspek", "Status", "Keterangan"], ...evItems.map((it, i) => [it, payload.evaluasi.status[i], payload.evaluasi.ket[i]])] });
     sheets.push({ name: "H_IPK", rows: [["Angkatan", "IPS", "IPK", "TryOut/Ukom", "Kendala"], ...(payload.ipk || []).map(r => [r.angkatan, r.ips, r.ipk, r.ukom, r.kendala])] });
-    sheets.push({ name: "H_Kelulusan", rows: [["Tahun lulus (yudisium)", "Jumlah", "Tepat waktu", "Keterangan"], ...(payload.lulus || []).map(r => [r.tahun, r.jumlah, r.tepat, r.ket])] });
+    sheets.push({ name: "H_Kelulusan", rows: [["Tahun lulus (yudisium)", "Jalur", "Masa studi RPL (semester)", "Jumlah", "Tepat waktu", "Keterangan"], ...(payload.lulus || []).map(r => [r.tahun, r.jalur || "", r.masaStudi || "", r.jumlah, r.tepat, r.ket])] });
     const kpiVal = { ukom: c.ukom, tepatWaktu: c.tepat, rasio: c.rasio, inggris: c.inggris, prestasi: c.prestasi, akreditasi: F.kpiInput.akreditasi };
     sheets.push({ name: "I_KPI", rows: [["Kode", "Indikator", "Target", "Realisasi", "Nilai terhitung"], ...Object.keys(T).map(k => [T[k].kode, T[k].label, payload.kpi[k].target, payload.kpi[k].real, kpiVal[k]])] });
     sheets.push({ name: "J_Rekomendasi", rows: [["No", "Permasalahan", "Tindak lanjut"], ...(payload.rekomendasi || []).map((r, i) => [i + 1, r[0], r[1]])] });
