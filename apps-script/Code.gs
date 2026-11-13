@@ -351,6 +351,20 @@ function doGet(e) {
     if (!valid_(p.semester)) return out_({ ok: false, error: "Semester tidak valid" });
     const sh = SpreadsheetApp.getActive().getSheetByName("Isian");
     const v = sh.getDataRange().getValues();
+    if (p.action === "publik") {
+      /* Semester yang sudah diarsipkan: isian final hasil perbaikan yang telah disetujui dapat dilihat publik, sama seperti arsipnya.
+       * Hanya isian (payload) yang dikirim; NIP dihapus, catatan pimpinan dan Ketua Jurusan tidak ikut. Semester berjalan tetap wajib login. */
+      const data = {};
+      if (SEMESTER_TERKUNCI.indexOf(p.semester) < 0) return out_({ ok: true, data: data });
+      for (let i = 1; i < v.length; i++) {
+        if (v[i][0] !== p.semester || v[i][2] !== "final") continue;
+        const r = readRec_(v[i]); if (!r.payload) continue;
+        const pl = JSON.parse(JSON.stringify(r.payload).replace(/\b(19|20)\d{16}\b/g, ""));
+        if (pl.identitas) { pl.identitas.nipKaprodi = ""; pl.identitas.nipKajur = ""; }
+        data[v[i][1]] = { status: "final", updatedAt: r.updatedAt, payload: pl, sumberPublik: true };
+      }
+      return out_({ ok: true, data: data });
+    }
     if (p.action === "list") {
       const m = manajemen_(p);
       if (!m) return out_({ ok: false, error: "Akses pimpinan diperlukan" });
