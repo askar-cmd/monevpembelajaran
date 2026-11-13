@@ -75,6 +75,7 @@
     links.push(["#/laporan", "Laporan"], ["#/pejabat", "Pejabat"], ["#/panduan", "Panduan"]);
     if (sesNav && (sesNav.jabatanKey === "kapusbangdik" || sesNav.jabatanKey === "admin")) links.splice(5, 0, ["#/koreksi", "Koreksi Data"]);
     if (sesNav && (sesNav.jabatanKey === "kapusbangdik" || sesNav.jabatanKey === "admin")) links.splice(6, 0, ["#/kontrol", "Kontrol Catatan"]);
+    if (sesNav && Api.enabled()) links.splice(links.findIndex(l => l[0] === "#/panduan"), 0, ["#/pengumuman", "Pengumuman"]);
     $("#nav").innerHTML = links.map(([h, t]) => `<a href="${h}" class="${route.startsWith(h.slice(1)) ? "on" : ""}">${t}</a>`).join("");
     const who = ses ? (ses.role === "prodi" ? (Data.prodi(ses.prodiId) || {}).nama : (ses.jabatan || "Pimpinan")) : (Api.enabled() ? "Belum masuk" : "Mode lokal");
     $("#user").innerHTML = `<span title="${esc(ses && ses.nama ? ses.nama + " — " + who : who)}">${esc(who)}</span>${ses ? `<button id="btnOut">Keluar</button>` : Api.enabled() ? `<button id="btnIn">Masuk</button>` : ""}`;
@@ -719,6 +720,8 @@
     const hPath = h.split("?")[0];
     const qs = h.split("?")[1] || "";
     renderHeader(hPath);
+    /* pengumuman yang belum dibaca muncul sebagai jendela bagi Ketua Program Studi */
+    setTimeout(() => { if (window.MONEV_PENGUMUMAN) window.MONEV_PENGUMUMAN.cekBaru(); }, 1200);
     const [, a, b] = hPath.split("/");
     window.scrollTo(0, 0);
     if (a === "prodi" && b) return viewProdi(b);
@@ -731,6 +734,7 @@
     if (a === "kontrol") return viewKontrol();
     if (a === "laporan") return viewLaporan();
     if (a === "pejabat") return window.MONEV_PEJABAT.view();
+    if (a === "pengumuman") return window.MONEV_PENGUMUMAN.view();
     if (a === "panduan") return viewPanduan();
     return viewDasbor();
   }
