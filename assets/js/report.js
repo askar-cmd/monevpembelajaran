@@ -97,8 +97,8 @@
   function prodiBlocks(sem, id, withCharts) {
     const p = Data.prodi(id), rec = Data.get(sem, id);
     if (!rec) throw new Error("Belum ada data untuk program studi ini");
-    const P = rec.payload, m = metrics(P), s = Data.semester(sem), I = P.identitas || {};
-    const prevSem = Data.previousSemester(sem), prev = prevSem ? Data.get(prevSem, id) : null, pm = prev ? metrics(prev.payload) : null;
+    const P = rec.payload, m = metrics(P, sem), s = Data.semester(sem), I = P.identitas || {};
+    const prevSem = Data.previousSemester(sem), prev = prevSem ? Data.get(prevSem, id) : null, pm = prev ? metrics(prev.payload, prevSem) : null;
     const out = [kop("LAPORAN MONITORING DAN EVALUASI PEMBELAJARAN", [`SEMESTER ${s.label.toUpperCase()}`], [`JURUSAN ${p.jurusan.toUpperCase()}`, `PROGRAM STUDI ${p.nama.toUpperCase()}`])];
     out.push(...pendahuluan(s.label, `pada Program Studi ${p.nama}`, `diisi oleh ${I.kaprodi || "Ketua Program Studi"}${I.tanggal ? ", tanggal " + tglID(I.tanggal) : ""}`));
 
@@ -150,7 +150,8 @@
     out.push(B.table(["Jenis kendala", "MK terdampak", "Uraian"], KENDALA.map(k => { const x = (P.kendala || {})[k.id] || {}; return [k.label, x.mk || "–", x.uraian || "Tidak ada kendala"]; }), { widths: [22, 30, 48] }));
     out.push(B.h2("2.8 IPS, IPK, Uji Kompetensi dan Kelulusan Tepat Waktu"));
     out.push(B.table(["Angkatan", "IPS", "IPK", "Try Out/Uji Kompetensi", "Kendala"], (P.ipk || []).map(r => [r.angkatan, fmt(r.ips, 2), fmt(r.ipk, 2), r.ukom === null ? "–" : pct(r.ukom), r.kendala || ""]), { widths: [22, 10, 10, 13, 45] }));
-    out.push((P.lulus || []).length ? B.table(["Angkatan wisuda", "Jumlah lulusan", "Lulus tepat waktu", "Persentase (%)", "Keterangan"], P.lulus.map(r => [r.tahun, val(r.jumlah), val(r.tepat), r.jumlah ? pct(r.tepat / r.jumlah * 100) : "–", r.ket || ""]), { widths: [22, 12, 13, 11, 42] }) : B.p("Data kelulusan tepat waktu tidak diisi.", { i: true }));
+    if (m.lulusFormatLama) out.push(B.p("Catatan: data kelulusan diisi dengan format lama (beberapa tahun/angkatan), belum berupa lulusan yang yudisium pada semester ini.", { i: true }));
+    out.push((P.lulus || []).length ? B.table(["Tahun lulus (yudisium)", "Jumlah lulusan", "Lulus tepat waktu", "Persentase (%)", "Keterangan"], P.lulus.map(r => [r.tahun, val(r.jumlah), val(r.tepat), r.jumlah ? pct(r.tepat / r.jumlah * 100) : "–", r.ket || ""]), { widths: [22, 12, 13, 11, 42] }) : B.p("Data kelulusan tepat waktu tidak diisi.", { i: true }));
     out.push(B.h2("2.9 Keterkaitan dengan KPI Institusi (Bagian I)"));
     out.push(B.table(["Kode", "Indikator", "Target institusi", "Realisasi (program studi)", "Nilai terhitung", "Status"], Object.keys(T).map(k => {
       const x = (P.kpi || {})[k] || {}; const v = { ukom: m.ukom, tepatWaktu: m.tepatWaktu, rasio: m.rasio, inggris: m.inggris, prestasi: m.prestasi, akreditasi: m.akreditasi }[k];
