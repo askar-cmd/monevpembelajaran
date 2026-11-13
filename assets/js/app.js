@@ -609,6 +609,14 @@
         <li>Jika usulan <b>ditolak</b>, data tidak berubah; usulan tersimpan sebagai log/riwayat.</li>
         ${Api.enabled() ? "" : "<li>Mode lokal: usulan hanya tersimpan di peramban ini dan tidak sinkron antar perangkat.</li>"}
       </ol></div>
+      <div class="card"><h3>Fitur Baru Belum Tampil? Muat Ulang dan Hapus Cache Peramban</h3>
+        <p class="hint">Peramban menyimpan salinan aplikasi (cache) agar cepat dibuka. Setelah aplikasi diperbarui oleh Pusbangdik, salinan lama kadang masih dipakai sehingga tampilan, perhitungan, atau formulir baru belum muncul. Pembaruan biasanya tampil sendiri paling lambat sekitar 10 menit; bila belum, lakukan langkah berikut secara berurutan sampai fitur baru tampil.</p><ol>
+        <li><b>Muat ulang paksa</b> (cara tercepat). Komputer Windows: tekan <b>Ctrl + Shift + R</b> atau <b>Ctrl + F5</b>. Mac: tekan <b>Cmd + Shift + R</b>. Ponsel: tutup tab aplikasi, lalu buka kembali alamatnya.</li>
+        <li><b>Google Chrome atau Microsoft Edge di komputer</b>: tekan <b>Ctrl + Shift + Delete</b> → Rentang waktu: <b>Sepanjang waktu</b> → centang <b>hanya</b> "Gambar dan file dalam cache" (di Edge: "Gambar dan file yang di-cache") → klik <b>Hapus data</b> → buka kembali aplikasi.</li>
+        <li><b>Chrome di ponsel Android</b>: ketuk menu <b>⋮</b> → Setelan → Privasi dan keamanan → Hapus data penjelajahan → centang <b>hanya</b> "Gambar dan file dalam cache" → Hapus data.</li>
+        <li><b>Safari di iPhone/iPad</b>: Pengaturan → Safari (iOS 18 ke atas: Pengaturan → Aplikasi → Safari) → Lanjutan → Data Situs Web → cari <b>github.io</b> → geser ke kiri → Hapus. Cara ini juga menghapus draf yang tersimpan di peramban, jadi simpan draf ke server terlebih dahulu.</li>
+        <li>Bila diminta, <b>masuk kembali</b> dengan NIP dan PIN.</li>
+      </ol><div class="notice warn" style="margin-top:10px"><b>Perhatian:</b> jangan mencentang "Cookie dan data situs lain". Pilihan itu ikut menghapus draf isian yang belum tersimpan ke server. Sebelum menghapus data peramban, tekan <b>Simpan draf</b> dan pastikan muncul pesan "Draf tersimpan di server".</div></div>
       <div class="card"><h3>Kode Program Studi (label grafik)</h3><div class="tbl-wrap"><table><thead><tr><th>Kode</th><th>Program studi</th><th>Jenjang</th><th>Jurusan</th></tr></thead><tbody>
         ${C.prodi.map(p => `<tr><td><b>${esc(p.kode)}</b></td><td>${esc(p.nama)}</td><td>${esc(p.jenjang)}</td><td>${esc(p.jurusan)}</td></tr>`).join("")}
       </tbody></table></div></div>
