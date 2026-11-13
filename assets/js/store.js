@@ -361,6 +361,9 @@
     m.tepatWaktu = lj ? lt / lj * 100 : null;
     m.totalLulusan = lj || null;
     m.lulusDiisi = lulus.length > 0;
+    /* rincian jalur (Reguler/RPL); persentase KPI memakai gabungan seluruh lulusan */
+    m.lulusRpl = baru.filter(r => r.jalur === "RPL").reduce((s, r) => s + num(r.jumlah), 0);
+    m.lulusReguler = (lj || 0) - m.lulusRpl;
     m.lulusFormatLama = !!(kunci && semuaLulus.length && !baru.length);
     const k = p.kpi || {};
     m.rasio = rasioN(k.rasio && k.rasio.real);
