@@ -324,7 +324,7 @@
     { id: "lms", label: "Sistem Informasi / LMS" }, { id: "bahan", label: "Bahan Ajar / Referensi" }, { id: "lain", label: "Lainnya" }
   ];
 
-  function metrics(p) {
+  function metrics(p, sem) {
     if (!p) return null;
     const A = C.ambang;
     const m = {};
@@ -346,10 +346,17 @@
     m.cuti = ret.reduce((s, r) => s + (num(r.cuti) || 0), 0);
     m.keluar = ret.reduce((s, r) => s + (num(r.do) || 0) + (num(r.pindah) || 0), 0);
     m.keluarPct = tot ? m.keluar / tot * 100 : null;
-    const lulus = (p.lulus || []).filter(r => num(r.jumlah));
+    /* Kelulusan tepat waktu: sejak 13 Nov 2026 satu semester = lulusan yang yudisium pada semester itu (kunci tahun = tahunLulus(sem)).
+     * Isian format lama (beberapa tahun/angkatan, termasuk arsip Genap 2025/2026) tetap dihitung apa adanya dan ditandai formatLama. */
+    const semuaLulus = (p.lulus || []).filter(r => num(r.jumlah) !== null);
+    const kunci = sem ? tahunLulus(sem) : null;
+    const baru = kunci ? semuaLulus.filter(r => String(r.tahun).trim() === kunci) : [];
+    const lulus = baru.length ? baru : semuaLulus;
     const lj = lulus.reduce((s, r) => s + num(r.jumlah), 0), lt = lulus.reduce((s, r) => s + (num(r.tepat) || 0), 0);
     m.tepatWaktu = lj ? lt / lj * 100 : null;
     m.totalLulusan = lj || null;
+    m.lulusDiisi = lulus.length > 0;
+    m.lulusFormatLama = !!(kunci && semuaLulus.length && !baru.length);
     const k = p.kpi || {};
     m.rasio = rasioN(k.rasio && k.rasio.real);
     m.rasioCapaian = rasioCapaian(m.rasio);
@@ -391,6 +398,7 @@
     if (m.eval.b) f.push({ lv: "kuning", t: `${m.eval.b} aspek evaluasi hasil belajar belum sesuai` });
     if (m.rps.kosong === m.rps.n && m.rps.n) f.push({ lv: "abu", t: "Capaian RPS (F) tidak diisi" });
     if (m.eval.kosong === m.eval.n && m.eval.n) f.push({ lv: "abu", t: "Evaluasi hasil belajar (H) tidak diisi" });
+    if (m.lulusFormatLama) f.push({ lv: "abu", t: "Data kelulusan tepat waktu masih format lama (bukan lulusan yudisium semester ini)" });
     if (m.kelengkapan < 70) f.push({ lv: "abu", t: `Kelengkapan isian ${m.kelengkapan}%` });
     m.flags = f;
     m.skorRisiko = f.reduce((s, x) => s + (x.lv === "merah" ? 3 : x.lv === "kuning" ? 1 : 0.5), 0);
@@ -412,7 +420,21 @@
     p.terbuka = today() >= p.mulai && today() <= p.batas;
     return p;
   };
+  /* Tahun lulus (yudisium) yang menjadi isian kelulusan tepat waktu sebuah semester.
+   * Genap = lulusan yang yudisium pada akhir semester genap, kapan pun wisudanya (Genap 2025/2026 -> "2026").
+   * Ganjil = lulusan yang yudisium selama semester ganjil (Ganjil 2026/2027 -> "Ganjil 2026/2027"). */
+  const tahunLulus = sem => {
+    const m = /^(ganjil|genap)-(\d{4})-(\d{4})$/.exec(String(sem || "")); if (!m) return null;
+    return m[1] === "genap" ? m[3] : "Ganjil " + m[2] + "/" + m[3];
+  };
+  const labelLulus = sem => { const t = tahunLulus(sem); return !t ? "" : /^Ganjil/.test(t) ? "yudisium " + t.replace("Ganjil", "Semester Ganjil") : "tahun lulus " + t; };
+  const keteranganLulus = sem => {
+    const m = /^(ganjil|genap)-(\d{4})-(\d{4})$/.exec(String(sem || "")); if (!m) return "";
+    return m[1] === "genap"
+      ? `lulusan yang yudisium pada akhir Semester Genap ${m[2]}/${m[3]} (tahun lulus ${m[3]}), kapan pun wisudanya`
+      : `lulusan yang yudisium selama Semester Ganjil ${m[2]}/${m[3]} (Agustus ${m[2]} s.d. Januari ${m[3]}), kapan pun wisudanya`;
+  };
   /* tanggal hari ini menurut jam perangkat (bukan UTC), format yyyy-mm-dd */
   const today = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
-  window.MONEV = { today, periode, C, Session, Api, Data, metrics, fmt, num, rasioN, rasioCapaian, rasioCapaianColor, mean, isFilled, TEMA, temaOf, KENDALA, safe };
+  window.MONEV = { today, periode, tahunLulus, labelLulus, keteranganLulus, C, Session, Api, Data, metrics, fmt, num, rasioN, rasioCapaian, rasioCapaianColor, mean, isFilled, TEMA, temaOf, KENDALA, safe };
 })();
