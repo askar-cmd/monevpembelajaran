@@ -118,6 +118,40 @@ function getKoreksiSheet_() {
   return sh;
 }
 
+/* ---------------- pengumuman untuk Ketua Program Studi ---------------- */
+/* Sheet Pengumuman: satu baris per pengumuman. Sheet PengumumanBaca: satu baris per konfirmasi baca (tanpa NIP). */
+const KOLOM_PENGUMUMAN = ["id", "dibuat", "oleh", "judul", "isi", "sasaran", "berlakuSampai", "aktif", "diubah"];
+function getPengumumanSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName("Pengumuman") || ss.insertSheet("Pengumuman");
+  if (sh.getLastRow() < 1) { sh.appendRow(KOLOM_PENGUMUMAN); sh.setFrozenRows(1); }
+  return sh;
+}
+function getBacaSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName("PengumumanBaca") || ss.insertSheet("PengumumanBaca");
+  if (sh.getLastRow() < 1) { sh.appendRow(["idPengumuman", "prodiId", "dibacaOleh", "waktu"]); sh.setFrozenRows(1); }
+  return sh;
+}
+function bacaPengumuman_() {
+  const v = getPengumumanSheet_().getDataRange().getValues(), list = [];
+  for (let i = 1; i < v.length; i++) {
+    if (!v[i][0]) continue;
+    list.push({ id: String(v[i][0]), dibuat: iso_(v[i][1]), oleh: String(v[i][2] || ""), judul: String(v[i][3] || ""), isi: String(v[i][4] || ""),
+      sasaran: String(v[i][5] || "semua"), berlakuSampai: v[i][6] instanceof Date ? Utilities.formatDate(v[i][6], "Asia/Makassar", "yyyy-MM-dd") : String(v[i][6] || ""),
+      aktif: String(v[i][7]).toUpperCase() !== "FALSE", diubah: iso_(v[i][8]), baris: i + 1 });
+  }
+  return list;
+}
+function sasaranProdi_(p, prodiId) { return p.sasaran === "semua" || p.sasaran.split(",").indexOf(prodiId) >= 0; }
+function berlaku_(p) { const t = Utilities.formatDate(new Date(), "Asia/Makassar", "yyyy-MM-dd"); return p.aktif && (!p.berlakuSampai || p.berlakuSampai >= t); }
+function daftarBaca_() {
+  const v = getBacaSheet_().getDataRange().getValues(), m = {};
+  for (let i = 1; i < v.length; i++) { if (!v[i][0]) continue; (m[v[i][0]] = m[v[i][0]] || []).push({ prodiId: String(v[i][1]), oleh: String(v[i][2] || ""), waktu: iso_(v[i][3]) }); }
+  return m;
+}
+function kapusbangdik_(q) { const m = manajemen_(q); return m && (m.role === "admin" || m.jabatanKey === "kapusbangdik") ? m : null; }
+
 /* ---------------- kontrol catatan (helper) ---------------- */
 function perbaikiHeaderKontrol() {
   const ss = SpreadsheetApp.getActive();
@@ -348,6 +382,22 @@ function doGet(e) {
       }
       return out_({ ok: true, data: data });
     }
+    if (p.action === "pengumuman") {
+      /* Ketua Program Studi: pengumuman berlaku yang ditujukan ke prodinya + status baca.
+       * Pimpinan dan Ketua Jurusan: semua pengumuman beserta rekap baca (hanya Kapusbangdik yang dapat mengubah). */
+      const baca = daftarBaca_(), semua = bacaPengumuman_();
+      if (p.prodiId && checkPin_(p.prodiId, p.pin, p.nip)) {
+        const data = semua.filter(x => berlaku_(x) && sasaranProdi_(x, p.prodiId)).map(x => {
+          const b = (baca[x.id] || []).find(r => r.prodiId === p.prodiId);
+          return { id: x.id, dibuat: x.dibuat, oleh: x.oleh, judul: x.judul, isi: x.isi, berlakuSampai: x.berlakuSampai, dibaca: !!b, dibacaAt: b ? b.waktu : "" };
+        });
+        return out_({ ok: true, role: "prodi", data: data });
+      }
+      const m = manajemen_(p);
+      if (!m) return out_({ ok: false, error: "Silakan masuk terlebih dahulu" });
+      const data = semua.map(x => Object.assign({}, x, { berlaku: berlaku_(x), baca: baca[x.id] || [] }));
+      return out_({ ok: true, role: m.role, bolehUbah: m.role === "admin" || m.jabatanKey === "kapusbangdik", data: data });
+    }
     if (!valid_(p.semester)) return out_({ ok: false, error: "Semester tidak valid" });
     const sh = SpreadsheetApp.getActive().getSheetByName("Isian");
     const v = sh.getDataRange().getValues();
@@ -490,6 +540,52 @@ function doPost(e) {
       sh.deleteRow(r);
       log_("kontrol-hapus", v[r-1][1], v[r-1][2], "");
       return out_({ ok: true });
+    }
+    if (b.action === "pengumumanSimpan") {
+      const m = kapusbangdik_(b);
+      if (!m) return out_({ ok: false, error: "Akses Kapusbangdik diperlukan" });
+      const d = b.data || {}, judul = String(d.judul || "").trim(), isi = String(d.isi || "").trim();
+      if (judul.length < 3 || judul.length > 200) return out_({ ok: false, error: "Judul pengumuman 3 s.d. 200 karakter" });
+      if (isi.length < 3 || isi.length > 8000) return out_({ ok: false, error: "Isi pengumuman 3 s.d. 8000 karakter" });
+      let sasaran = "semua";
+      if (d.sasaran !== "semua") {
+        const ids = PRODI.map(x => x[0]), pilih = (Array.isArray(d.sasaran) ? d.sasaran : String(d.sasaran || "").split(",")).map(x => String(x).trim()).filter(x => ids.indexOf(x) >= 0);
+        if (!pilih.length) return out_({ ok: false, error: "Pilih minimal satu program studi sasaran" });
+        sasaran = pilih.join(",");
+      }
+      const sampai = /^\d{4}-\d{2}-\d{2}$/.test(String(d.berlakuSampai || "")) ? String(d.berlakuSampai) : "";
+      const sh = getPengumumanSheet_(), now = new Date().toISOString(), lama = d.id ? bacaPengumuman_().find(x => x.id === String(d.id)) : null;
+      if (d.id && !lama) return out_({ ok: false, error: "Pengumuman tidak ditemukan" });
+      if (lama) {
+        sh.getRange(lama.baris, 4, 1, 4).setValues([[judul, isi, sasaran, sampai]]); sh.getRange(lama.baris, 7).setNumberFormat("@").setValue(sampai);
+        sh.getRange(lama.baris, 9).setValue(now);
+        log_("pengumuman-ubah", "", "", lama.id);
+        return out_({ ok: true, id: lama.id });
+      }
+      const id = "P" + Utilities.formatDate(new Date(), "Asia/Makassar", "yyMMddHHmmss") + Math.floor(Math.random() * 90 + 10);
+      sh.appendRow([id, now, m.nama || m.jabatan || "Kapusbangdik", judul, isi, sasaran, sampai, true, ""]);
+      sh.getRange(sh.getLastRow(), 7).setNumberFormat("@").setValue(sampai);
+      log_("pengumuman-buat", "", "", id);
+      return out_({ ok: true, id: id });
+    }
+    if (b.action === "pengumumanStatus") {
+      if (!kapusbangdik_(b)) return out_({ ok: false, error: "Akses Kapusbangdik diperlukan" });
+      const x = bacaPengumuman_().find(r => r.id === String(b.id || ""));
+      if (!x) return out_({ ok: false, error: "Pengumuman tidak ditemukan" });
+      getPengumumanSheet_().getRange(x.baris, 8).setValue(!!b.aktif);
+      log_(b.aktif ? "pengumuman-aktif" : "pengumuman-nonaktif", "", "", x.id);
+      return out_({ ok: true });
+    }
+    if (b.action === "pengumumanBaca") {
+      if (!valid_(b.prodiId) || !checkPin_(b.prodiId, b.pin, b.nip)) return out_({ ok: false, error: "NIP/PIN tidak valid atau masa jabatan telah berakhir" });
+      const x = bacaPengumuman_().find(r => r.id === String(b.id || ""));
+      if (!x || !berlaku_(x) || !sasaranProdi_(x, b.prodiId)) return out_({ ok: false, error: "Pengumuman tidak ditemukan atau sudah tidak berlaku" });
+      const sudah = (daftarBaca_()[x.id] || []).find(r => r.prodiId === b.prodiId);
+      if (sudah) return out_({ ok: true, waktu: sudah.waktu });
+      const k = kaprodiAktif_(b.prodiId), now = new Date().toISOString();
+      getBacaSheet_().appendRow([x.id, b.prodiId, k ? k.nama : "", now]);
+      log_("pengumuman-baca", "", b.prodiId, x.id);
+      return out_({ ok: true, waktu: now });
     }
     if (!valid_(b.semester) || !valid_(b.prodiId)) return out_({ ok: false, error: "Parameter tidak valid" });
     const sh = SpreadsheetApp.getActive().getSheetByName("Isian");
