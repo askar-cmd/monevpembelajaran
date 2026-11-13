@@ -32,7 +32,7 @@
       rps: { status: Array(6).fill(null), ket: Array(6).fill("") },
       kendala: Object.fromEntries(KENDALA.map(k => [k.id, { mk: "", uraian: "" }])),
       evaluasi: p.jenjang === "Profesi" ? { varian: "profesi", item: EVAL_PROFESI.slice(), status: Array(8).fill(null), ket: Array(8).fill("") } : { varian: "reguler", status: Array(6).fill(null), ket: Array(6).fill("") },
-      ipk: [], lulus: [], kpiInput: { ukomPeserta: "", ukomLulus: "", akreditasi: "", ukomKet: "" },
+      ipk: [], lulusBaru: { jumlah: "", tepat: "", ket: "" }, lulusLama: [], kpiInput: { ukomPeserta: "", ukomLulus: "", akreditasi: "", ukomKet: "" },
       rekomendasi: [], tindakLanjut: [],
       tambahan: { dosenTetap: "", mhsAktif: "", dosenInggris: "", mkTotal: "", mkEdlink: "", edom: "", edomResponden: "", dosenObe: "" },
       bukti: {}
@@ -51,7 +51,11 @@
     if (P.kendala) f.kendala = Object.assign(f.kendala, JSON.parse(JSON.stringify(P.kendala)));
     if (P.evaluasi && (P.evaluasi.varian === f.evaluasi.varian)) f.evaluasi = Object.assign(f.evaluasi, JSON.parse(JSON.stringify(P.evaluasi)), f.evaluasi.varian === "profesi" ? { item: EVAL_PROFESI.slice() } : {});
     f.ipk = (P.ipk || []).map(x => Object.assign({}, x));
-    f.lulus = (P.lulus || []).map(x => Object.assign({}, x));
+    /* kelulusan: hanya baris tahun lulus semester ini yang dipakai; baris lain (format lama) disimpan terpisah sebagai jejak */
+    const kunci = M.tahunLulus(sem), semua = (P.lulus || []).concat(P.lulusLama || []);
+    const cocok = semua.find(x => String(x.tahun).trim() === kunci);
+    if (cocok) f.lulusBaru = { jumlah: cocok.jumlah === null || cocok.jumlah === undefined ? "" : cocok.jumlah, tepat: cocok.tepat === null || cocok.tepat === undefined ? "" : cocok.tepat, ket: cocok.ket || "" };
+    f.lulusLama = semua.filter(x => x !== cocok && (x.tahun || num(x.jumlah) !== null)).map(x => Object.assign({}, x));
     if (P.kpiInput) f.kpiInput = Object.assign(f.kpiInput, P.kpiInput);
     f.rekomendasi = (P.rekomendasi || []).map(r => ({ masalah: r[0], tindak: r[1] }));
     f.tindakLanjut = (P.tindakLanjut || []).map(x => Object.assign({}, x));
@@ -63,7 +67,7 @@
     const t = f.tambahan, k = f.kpiInput;
     const dt = num(t.dosenTetap), ma = num(t.mhsAktif), di = num(t.dosenInggris);
     const up = num(k.ukomPeserta), ul = num(k.ukomLulus);
-    const lj = f.lulus.reduce((s, r) => s + (num(r.jumlah) || 0), 0), lt = f.lulus.reduce((s, r) => s + (num(r.tepat) || 0), 0);
+    const lj = num(f.lulusBaru.jumlah) || 0, lt = num(f.lulusBaru.tepat) || 0;
     return {
       rasio: dt && ma ? ma / dt : null, inggris: dt && di !== null ? di / dt * 100 : null,
       ukom: up ? (ul || 0) / up * 100 : null, tepat: lj ? lt / lj * 100 : null,
@@ -71,7 +75,7 @@
       edlink: num(t.mkTotal) ? (num(t.mkEdlink) || 0) / num(t.mkTotal) * 100 : null
     };
   }
-  function toPayload(f) {
+  function toPayload(f, kirim) {
     const c = computed(f);
     const s = (v, d, suf) => v === null ? "" : fmt(v, d) + (suf || "");
     return {
@@ -83,7 +87,9 @@
       retensi: f.retensi.filter(r => r.angkatan).map(r => ({ angkatan: r.angkatan, cuti: num(r.cuti) || 0, do: num(r.do) || 0, skors: num(r.skors) || 0, pindah: num(r.pindah) || 0, ket: r.ket || "" })),
       rps: f.rps, kendala: f.kendala, evaluasi: f.evaluasi,
       ipk: f.ipk.filter(r => r.angkatan).map(r => ({ angkatan: r.angkatan, ips: num(r.ips), ipk: num(r.ipk), ukom: num(r.ukom), kendala: r.kendala || "" })),
-      lulus: f.lulus.filter(r => r.tahun).map(r => ({ tahun: r.tahun, jumlah: num(r.jumlah), tepat: num(r.tepat), ket: r.ket || "" })),
+      lulus: num(f.lulusBaru.jumlah) === null ? [] : [{ tahun: M.tahunLulus(sem), jumlah: num(f.lulusBaru.jumlah), tepat: num(f.lulusBaru.jumlah) === 0 ? 0 : num(f.lulusBaru.tepat), ket: f.lulusBaru.ket || "" }],
+      /* isian format lama ikut tersimpan pada draf sebagai jejak, dan dilepas saat kirim final / usulan perbaikan */
+      ...(!kirim && f.lulusLama.length ? { lulusLama: f.lulusLama } : {}),
       kpiInput: f.kpiInput,
       kpi: {
         ukom: { target: T.ukom.target + "%", real: c.ukom === null ? (f.kpiInput.ukomKet || "") : s(c.ukom, 2, "%") },
@@ -121,7 +127,6 @@
     ukt: [{ k: "angkatan", l: "Tingkat / angkatan", ph: "Tingkat I / 2026" }, { k: "jumlah", l: "Jumlah mahasiswa", type: "num", w: "100px" }, { k: "lunas", l: "Jumlah lunas", type: "num", w: "100px" }, { k: "ket", l: "Keterangan" }],
     retensi: [{ k: "angkatan", l: "Tingkat / angkatan" }, { k: "cuti", l: "Cuti", type: "num", w: "70px" }, { k: "do", l: "Berhenti/putus studi", type: "num", w: "90px" }, { k: "skors", l: "Skors", type: "num", w: "70px" }, { k: "pindah", l: "Pindah", type: "num", w: "70px" }, { k: "ket", l: "Keterangan / penyebab" }],
     ipk: [{ k: "angkatan", l: "Tingkat / angkatan" }, { k: "ips", l: "Rata-rata IPS", type: "num", max: 4, w: "100px" }, { k: "ipk", l: "Rata-rata IPK", type: "num", max: 4, w: "100px" }, { k: "ukom", l: "Hasil Try Out/Uji Kompetensi (%)", type: "num", max: 100, w: "110px" }, { k: "kendala", l: "Kendala" }],
-    lulus: [{ k: "tahun", l: "Angkatan wisuda" }, { k: "jumlah", l: "Jumlah lulusan", type: "num", w: "110px" }, { k: "tepat", l: "Lulus tepat waktu", type: "num", w: "120px" }, { k: "ket", l: "Keterangan" }],
     rekomendasi: [{ k: "masalah", l: "Permasalahan / temuan", type: "area", rows: 3, w: "45%" }, { k: "tindak", l: "Rekomendasi / tindak lanjut yang diusulkan", type: "area", rows: 3, w: "55%" }],
     tindakLanjut: [{ k: "masalah", l: "Rekomendasi semester lalu", type: "area", rows: 5, w: "44%" }, { k: "status", l: "Status", type: "select", opts: ["Belum", "Proses", "Selesai", "Tidak relevan"], w: "112px" }, { k: "progres", l: "Uraian progres / kendala", type: "area", rows: 4, w: "34%" }, { k: "bukti", l: "Tautan bukti", type: "url", w: "18%" }]
   };
@@ -222,7 +227,9 @@
         `<div class="tbl-wrap"><table class="tbl-edit"><thead><tr><th>No</th><th>Aspek yang dimonitor</th><th style="width:190px">Status</th><th>Keterangan</th></tr></thead><tbody>
         ${EV.map((it, i) => `<tr><td class="c">${i + 1}</td><td>${esc(it)}</td><td>${statusRadios("eval", i, F.evaluasi.status[i])}</td><td><input data-sk="eval" data-i="${i}" value="${esc(F.evaluasi.ket[i] || "")}"></td></tr>`).join("")}</tbody></table></div>` + bukti("H") +
         `<h3 style="margin-top:16px">Rekapitulasi IPS, IPK, dan Hasil Try Out/Uji Kompetensi</h3>` + tableEditor("ipk", COLS.ipk) + bukti("ipk") +
-        `<h3 style="margin-top:16px">Rekapitulasi kelulusan tepat waktu</h3><p class="hint">D-III dan Sarjana Terapan: sesuai masa studi normal; Profesi: sesuai masa studi program. Isi 3 angkatan wisuda terakhir.</p>` + tableEditor("lulus", COLS.lulus) + bukti("lulus"))}
+        `<h3 style="margin-top:16px">Kelulusan tepat waktu</h3><p class="hint">Isi <b>${esc(M.keteranganLulus(sem))}</b>. Jangan isi tahun masuk atau angkatan tahun sebelumnya. Tepat waktu = lulus dalam masa studi normal: D-III paling lama 6 semester, Sarjana Terapan paling lama 8 semester, Profesi sesuai masa studi program. Isi 0 bila tidak ada lulusan pada semester ini.</p>
+        <div class="fgrid">${inp("lulusBaru.jumlah", "Jumlah lulusan (" + esc(M.labelLulus(sem)) + ")", "number", 'min="0"')}${inp("lulusBaru.tepat", "Lulus tepat waktu", "number", 'min="0"')}${inp("lulusBaru.ket", "Keterangan (mis. penyebab tidak tepat waktu)")}</div><p class="hint" id="lulusCalc"></p>` +
+        (F.lulusLama.length ? `<div class="notice warn" id="lulusLamaBox" style="margin-top:10px"><b>Isian kelulusan format lama</b> (tidak dihitung dan dilepas saat dikirim): ${F.lulusLama.map(r => `${esc(r.tahun || "tanpa tahun")}: ${fmt(num(r.jumlah), 0)} lulusan, ${fmt(num(r.tepat), 0)} tepat waktu`).join("; ")}. Isi kembali kotak di atas dengan data ${esc(M.keteranganLulus(sem))}.</div>` : "") + bukti("lulus"))}
       ${sec("I", "Keterkaitan dengan KPI Institusi 2026", "Isi angka mentah; capaian dihitung otomatis dan dibandingkan dengan target institusi (bukan target yang diketik program studi).",
         `<div class="fgrid">
           ${inp("tambahan.dosenTetap", "Jumlah dosen tetap program studi", "number", 'min="0"')}${inp("tambahan.mhsAktif", "Jumlah mahasiswa aktif", "number", 'min="0"')}
@@ -253,13 +260,14 @@
     const k = $("#kpiCalc");
     if (k) k.innerHTML = `<div class="tbl-wrap"><table><thead><tr><th>Kode</th><th>Indikator</th><th class="num">Target institusi</th><th class="num">Capaian terhitung</th></tr></thead><tbody>
       <tr><td>${T.ukom.kode}</td><td>${T.ukom.label}</td><td class="num">${fmt(T.ukom.target)}%</td><td class="num"><span class="badge ${ok(c.ukom, T.ukom.target)}">${c.ukom === null ? (F.kpiInput.ukomKet || "–") : fmt(c.ukom, 2) + "%"}</span></td></tr>
-      <tr><td>–</td><td>${T.tepatWaktu.label} (dari tabel kelulusan)</td><td class="num">${fmt(T.tepatWaktu.target)}%</td><td class="num"><span class="badge ${ok(c.tepat, T.tepatWaktu.target)}">${c.tepat === null ? "–" : fmt(c.tepat, 2) + "%"}</span></td></tr>
+      <tr><td>–</td><td>${T.tepatWaktu.label} (lulusan ${esc(M.labelLulus(sem))})</td><td class="num">${fmt(T.tepatWaktu.target)}%</td><td class="num"><span class="badge ${ok(c.tepat, T.tepatWaktu.target)}">${c.tepat === null ? "–" : fmt(c.tepat, 2) + "%"}</span></td></tr>
       <tr><td>${T.rasio.kode}</td><td>${T.rasio.label}</td><td class="num">1:${T.rasio.target}</td><td class="num"><span class="badge ${c.rasio === null ? "b-mute" : M.rasioCapaian(c.rasio) === 100 ? "b-ok" : M.rasioCapaian(c.rasio) >= 75 ? "b-warn" : "b-bad"}">${c.rasio === null ? "–" : "1:" + fmt(c.rasio, 2) + " (capaian " + M.rasioCapaian(c.rasio) + "%)"}</span></td></tr>
       <tr><td>${T.inggris.kode}</td><td>${T.inggris.label}</td><td class="num">${fmt(T.inggris.target)}%</td><td class="num"><span class="badge ${ok(c.inggris, T.inggris.target)}">${c.inggris === null ? "–" : fmt(c.inggris, 2) + "%"}</span></td></tr>
       <tr><td>${T.prestasi.kode}</td><td>${T.prestasi.label} (dari Bagian C)</td><td class="num">${T.prestasi.target}</td><td class="num"><span class="badge ${ok(c.prestasi, T.prestasi.target)}">${c.prestasi}</span></td></tr>
       <tr><td>${T.akreditasi.kode}</td><td>${T.akreditasi.label}</td><td class="num">Unggul</td><td class="num">${esc(F.kpiInput.akreditasi || "–")}</td></tr></tbody></table></div>`;
     const u = $("#uktCalc");
     if (u) { const j = F.ukt.reduce((s, r) => s + (num(r.jumlah) || 0), 0), l = F.ukt.reduce((s, r) => s + (num(r.lunas) || 0), 0); u.textContent = j ? `Total ${j} mahasiswa, ${l} lunas (${fmt(l / j * 100, 2)}%).` : ""; }
+    const lu = $("#lulusCalc"); if (lu) { const j = num(F.lulusBaru.jumlah), t = num(F.lulusBaru.tepat); lu.textContent = j === null ? "" : j === 0 ? "Tidak ada lulusan pada semester ini." : (t || 0) > j ? "Periksa kembali: lulus tepat waktu melebihi jumlah lulusan." : `${fmt(t || 0, 0)} dari ${fmt(j, 0)} lulusan tepat waktu (${fmt((t || 0) / j * 100, 2)}%).`; }
     const lc = $("#lCalc"); if (lc) lc.textContent = c.edlink === null ? "" : `Pemanfaatan Edlink: ${fmt(c.edlink, 1)}% mata kuliah.`;
   }
 
@@ -316,7 +324,10 @@
     if (!F.kpiInput.akreditasi) e.push("I — status akreditasi");
     if (num(F.tambahan.dosenInggris) > num(F.tambahan.dosenTetap)) e.push("I — dosen berkemampuan Bahasa Inggris melebihi jumlah dosen tetap");
     if (num(F.kpiInput.ukomLulus) > (num(F.kpiInput.ukomPeserta) || 0)) e.push("I — lulus Uji Kompetensi melebihi jumlah peserta");
-    F.lulus.forEach((r, i) => { if (num(r.tepat) > (num(r.jumlah) || 0)) e.push(`H — kelulusan baris ${i + 1}: lulus tepat waktu melebihi jumlah lulusan`); });
+    { const j = num(F.lulusBaru.jumlah), t = num(F.lulusBaru.tepat), th = M.labelLulus(sem);
+      if (j === null) e.push(`H — kelulusan tepat waktu: isi jumlah lulusan ${th} (isi 0 bila tidak ada lulusan)`);
+      else if (j > 0 && t === null) e.push(`H — kelulusan tepat waktu: isi jumlah lulus tepat waktu`);
+      else if (t > j) e.push("H — kelulusan tepat waktu: lulus tepat waktu melebihi jumlah lulusan"); }
     if (num(F.tambahan.mkEdlink) > (num(F.tambahan.mkTotal) || 0)) e.push("L — mata kuliah aktif di Edlink melebihi jumlah mata kuliah");
     F.tindakLanjut.forEach((r, i) => { if (r.status === "Selesai" && !r.bukti) e.push(`K — butir ${i + 1} Selesai: lampirkan tautan bukti`); });
     /* Tautan bukti dukung tidak diwajibkan sampai ada perintah lebih lanjut */
@@ -345,7 +356,7 @@
     const evItems = (payload.evaluasi && payload.evaluasi.item) || M.EVAL_ITEM;
     sheets.push({ name: "H_Evaluasi", rows: [["Aspek", "Status", "Keterangan"], ...evItems.map((it, i) => [it, payload.evaluasi.status[i], payload.evaluasi.ket[i]])] });
     sheets.push({ name: "H_IPK", rows: [["Angkatan", "IPS", "IPK", "TryOut/Ukom", "Kendala"], ...(payload.ipk || []).map(r => [r.angkatan, r.ips, r.ipk, r.ukom, r.kendala])] });
-    sheets.push({ name: "H_Kelulusan", rows: [["Angkatan wisuda", "Jumlah", "Tepat waktu", "Keterangan"], ...(payload.lulus || []).map(r => [r.tahun, r.jumlah, r.tepat, r.ket])] });
+    sheets.push({ name: "H_Kelulusan", rows: [["Tahun lulus (yudisium)", "Jumlah", "Tepat waktu", "Keterangan"], ...(payload.lulus || []).map(r => [r.tahun, r.jumlah, r.tepat, r.ket])] });
     const kpiVal = { ukom: c.ukom, tepatWaktu: c.tepat, rasio: c.rasio, inggris: c.inggris, prestasi: c.prestasi, akreditasi: F.kpiInput.akreditasi };
     sheets.push({ name: "I_KPI", rows: [["Kode", "Indikator", "Target", "Realisasi", "Nilai terhitung"], ...Object.keys(T).map(k => [T[k].kode, T[k].label, payload.kpi[k].target, payload.kpi[k].real, kpiVal[k]])] });
     sheets.push({ name: "J_Rekomendasi", rows: [["No", "Permasalahan", "Tindak lanjut"], ...(payload.rekomendasi || []).map((r, i) => [i + 1, r[0], r[1]])] });
@@ -362,8 +373,8 @@
   async function save(status) {
     if (sending) return; lockBtns(true);
     try {
-      const where = await Data.submit(sem, pid, toPayload(F), status);
-      dirty = false;
+      const where = await Data.submit(sem, pid, toPayload(F, status === "final"), status);
+      dirty = false; if (status === "final" && F.lulusLama.length) { F.lulusLama = []; const n = $("#lulusLamaBox"); if (n) n.remove(); }
       M.toast(status === "final" ? (where === "server" ? "Isian final terkirim ke server Pusbangdik" : "Tersimpan final di peramban - unduh berkas isian dan kirim ke Pusbangdik") : "Draf tersimpan" + (where === "server" ? " di server" : ""), 5000);
       $("#saveInfo").textContent = (status === "final" ? "Final" : "Draf") + " tersimpan " + new Date().toLocaleTimeString("id-ID");
       if (status === "final") { const fd = $("#fDraft"); if (fd) fd.remove(); const ff = $("#fFinal"); if (ff) ff.textContent = "Kirim ulang versi final"; }
@@ -373,7 +384,7 @@
   async function saveKoreksi(catatan) {
     if (sending) return; lockBtns(true);
     try {
-      const where = await Data.submitKoreksi(sem, pid, toPayload(F), catatan);
+      const where = await Data.submitKoreksi(sem, pid, toPayload(F, true), catatan);
       dirty = false;
       M.toast("Usulan perbaikan data terkirim ke Kapusbangdik untuk diverifikasi" + (where === "server" ? " (server)" : " (lokal)"), 5000);
       $("#saveInfo").textContent = "Usulan perbaikan terkirim " + new Date().toLocaleTimeString("id-ID");
