@@ -115,8 +115,13 @@
     async loadSemester(sem, force) {
       if (!Api.enabled()) return;
       const ses = Session.get();
-      if (!ses) return;
       if (this.loadedSemesters[sem] && !force) return;
+      /* Semester arsip: hasil perbaikan yang sudah disetujui ditampilkan juga kepada pengunjung tanpa login dan kepada
+       * program studi lain (tanpa NIP dan catatan). Tanpa ini, dashboard kembali ke arsip lama begitu sesi login berakhir. */
+      if ((this.semester(sem) || {}).status === "arsip" && (!ses || ses.role === "prodi")) {
+        try { const jp = await Api.get({ action: "publik", semester: sem }); this.server[sem] = this.server[sem] || {}; Object.assign(this.server[sem], jp.data || {}); } catch (e) { /* server lama: tetap memakai arsip */ }
+      }
+      if (!ses) { this.loadedSemesters[sem] = true; return; }
       const params = ses.role === "pimpinan" || ses.role === "kajur"
         ? Object.assign({ action: "list", semester: sem }, Api.auth(ses))
         : { action: "get", semester: sem, prodiId: ses.prodiId, nip: ses.nip, pin: ses.pin };
