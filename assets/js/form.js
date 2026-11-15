@@ -295,7 +295,11 @@
       else if (t.dataset.kd) { F.kendala[t.dataset.kd][t.dataset.k] = t.value; }
       else if (t.dataset.bk) { F.bukti[t.dataset.bk] = t.value.trim(); }
       else return;
-      if (t.type === "number" && t.value !== "") { const v = +t.value; const mx = t.max !== "" ? +t.max : null; t.style.borderColor = (v < 0 || (mx !== null && v > mx)) ? "var(--red)" : ""; }
+      if (t.type === "number") {
+        if (t.validity && t.validity.badInput) { t.style.borderColor = "var(--red)"; t.title = "Angka tidak terbaca, ketik ulang tanpa koma, titik, spasi, atau huruf"; }
+        else if (t.value !== "") { const v = +t.value; const mx = t.max !== "" ? +t.max : null; t.style.borderColor = (v < 0 || (mx !== null && v > mx)) ? "var(--red)" : ""; t.title = ""; }
+        else { t.style.borderColor = ""; t.title = ""; }
+      }
       mark(); recalc();
     });
     main.querySelectorAll("select").forEach(s => s.addEventListener("change", () => s.dispatchEvent(new Event("input", { bubbles: true }))));
@@ -319,8 +323,24 @@
   let tmr = null;
   function autosave() { clearTimeout(tmr); tmr = setTimeout(() => { const prev = Data.draftFor(sem, pid); Data.saveDraft(sem, pid, { payload: toPayload(F), status: prev && prev.status === "final" ? "final" : "draf", updatedAt: new Date().toISOString() }); const s = $("#saveInfo"); if (s) s.textContent = "Tersimpan otomatis di peramban " + new Date().toLocaleTimeString("id-ID"); }, 800); }
 
+  /* Kotak angka (input type=number) mengembalikan nilai KOSONG bila isinya dianggap tidak sah oleh
+   * peramban (mis. mengandung koma, titik, spasi, atau huruf). Isian terlihat terisi di layar, tetapi
+   * tidak terbaca program sehingga muncul peringatan "belum lengkap". Kotak seperti itu ditandai
+   * tersendiri agar Ketua Program Studi tahu kotak mana yang harus diketik ulang. */
+  function angkaTidakTerbaca() {
+    const out = [];
+    document.querySelectorAll("#fr input[type=number]").forEach(el => {
+      if (!(el.validity && el.validity.badInput)) return;
+      const lab = el.closest("label");
+      const nama = lab && lab.querySelector("span") ? lab.querySelector("span").textContent.trim() : "kotak angka";
+      el.style.borderColor = "var(--red)";
+      out.push(`Kotak "${nama}" tidak terbaca sebagai angka; ketik ulang angkanya tanpa koma, titik, spasi, atau huruf`);
+    });
+    return out;
+  }
+
   function validate() {
-    const e = [];
+    const e = angkaTidakTerbaca();
     if (!F.identitas.kaprodi) e.push("A — nama Ketua Program Studi");
     if (!F.identitas.tanggal) e.push("A — tanggal pengisian");
     if (!F.dosen.filter(r => r.mk).length) e.push("B — kehadiran dosen belum diisi");
@@ -342,7 +362,7 @@
       else if (j > 0 && t === null) e.push(`H — kelulusan tepat waktu: isi jumlah lulus tepat waktu (Reguler)`);
       else if (t > j) e.push("H — kelulusan tepat waktu: lulus tepat waktu Reguler melebihi jumlah lulusan");
       const jr = num(F.lulusRpl.jumlah), tr = num(F.lulusRpl.tepat);
-      if (jr === null && (tr !== null || num(F.lulusRpl.masaStudi) !== null)) e.push("H — kelulusan RPL: isi jumlah lulusan RPL (isi 0 bila tidak ada lulusan)");
+      if (jr === null && (tr !== null || num(F.lulusRpl.masaStudi) !== null)) e.push("H — kelulusan RPL: kotak \"Jumlah lulusan RPL\" masih kosong, padahal kotak RPL lainnya sudah diisi. Isi 0 bila program RPL ada tetapi tidak ada lulusan semester ini, atau kosongkan seluruh kotak RPL (lulus tepat waktu dan masa studi) bila program studi tidak menyelenggarakan RPL");
       if (jr > 0 && tr === null) e.push("H — kelulusan RPL: isi jumlah lulus tepat waktu (RPL)");
       if (jr > 0 && !num(F.lulusRpl.masaStudi)) e.push("H — kelulusan RPL: isi masa studi normal RPL (semester)");
       if (jr !== null && tr > jr) e.push("H — kelulusan RPL: lulus tepat waktu melebihi jumlah lulusan RPL"); }
