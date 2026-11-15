@@ -398,6 +398,10 @@ function doGet(e) {
       const data = semua.map(x => Object.assign({}, x, { berlaku: berlaku_(x), baca: baca[x.id] || [] }));
       return out_({ ok: true, role: m.role, bolehUbah: m.role === "admin" || m.jabatanKey === "kapusbangdik", data: data });
     }
+    /* Aksi di bawah ini membutuhkan semester. Aksi di luar daftar itu dikenali lebih dulu sebagai aksi tidak
+     * dikenal, agar klien versi baru yang memanggil aksi yang belum ada di server (Code.gs belum ditempel ulang
+     * dan dibuat Versi baru) tidak menerima pesan menyesatkan "Semester tidak valid". */
+    if (["publik", "list", "get"].indexOf(p.action) < 0) return out_({ ok: false, error: "Aksi '" + String(p.action || "") + "' tidak dikenal server. Kode Apps Script kemungkinan masih versi lama: tempel ulang Code.gs lalu buat Versi baru pada deployment yang sama." });
     if (!valid_(p.semester)) return out_({ ok: false, error: "Semester tidak valid" });
     const sh = SpreadsheetApp.getActive().getSheetByName("Isian");
     const v = sh.getDataRange().getValues();

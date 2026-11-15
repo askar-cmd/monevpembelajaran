@@ -86,7 +86,18 @@
     const body = $("#pgBody");
     if (!Api.enabled()) { body.innerHTML = `<div class="card empty">Pengumuman memerlukan server. Aplikasi sedang berjalan dalam mode lokal.</div>`; return; }
     if (!ses) { body.innerHTML = `<div class="card empty">Silakan <a href="#" id="pgMasuk">masuk</a> dengan NIP dan PIN untuk membaca pengumuman.</div>`; $("#pgMasuk").onclick = e => { e.preventDefault(); M.loginModal(null, view); }; return; }
-    let j; try { j = await muat(true); } catch (e) { body.innerHTML = `<div class="card empty">Gagal memuat pengumuman: ${esc(e.message)}</div>`; return; }
+    /* Server versi lama belum mengenal aksi "pengumuman": ia menjawab "Aksi tidak dikenal" atau, pada versi
+     * yang lebih lama lagi, "Semester tidak valid" (pemeriksaan semester tercapai lebih dulu). Pengumuman tidak
+     * bergantung pada semester, jadi pesan itu dijelaskan apa adanya agar tidak membingungkan. */
+    let j;
+    try { j = await muat(true); }
+    catch (e) {
+      const serverLama = /tidak dikenal|Semester tidak valid/i.test(e.message);
+      body.innerHTML = serverLama
+        ? `<div class="card empty"><b>Fitur pengumuman belum aktif di server.</b><br>Pengumuman tidak bergantung pada semester; pesan dari server hanya menandakan kode Apps Script masih versi lama. Tempel ulang <code>apps-script/Code.gs</code> ke Apps Script, lalu Terapkan &rarr; Kelola deployment &rarr; Versi baru pada deployment yang sama.<br><span class="hint">Pesan asli server: ${esc(e.message)}</span></div>`
+        : `<div class="card empty">Gagal memuat pengumuman: ${esc(e.message)}</div>`;
+      return;
+    }
     if (j.role === "prodi") return viewProdi(body, j.data || []);
     return viewKelola(body, j);
   }
