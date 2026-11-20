@@ -303,11 +303,11 @@
   };
   const rasioCapaianColor = n => {
     const c = rasioCapaian(n);
-    if (c === 100) return "#1F9D55";
-    if (c === 85) return "#00A39D";
+    if (c === 100) return "#1A8548";
+    if (c === 85) return "#00827E";
     if (c === 75) return "#E39B00";
     if (c === 65) return "#F5B400";
-    return "#D64545";
+    return "#CD4242";
   };
   const mean = a => { const x = a.filter(v => v !== null && !isNaN(v)); return x.length ? x.reduce((s, v) => s + v, 0) / x.length : null; };
   const isFilled = t => { if (!t) return false; const s = String(t).trim().toLowerCase(); return !!s && !["-", "tidak ada", "tidak", "0"].includes(s); };

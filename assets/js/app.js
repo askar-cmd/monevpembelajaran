@@ -27,6 +27,13 @@
     bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); });
     document.body.appendChild(bg); if (onMount) onMount(bg); return bg;
   }
+  /* teks putih atau gelap, mana yang kontrasnya lebih tinggi di atas warna latar hex (#RRGGBB) */
+  const inkOn = hex => {
+    const k = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+    const L = 0.2126 * k[0] + 0.7152 * k[1] + 0.0722 * k[2];
+    const gelap = 0.007; /* luminans #1A1400 */
+    return 1.05 / (L + 0.05) >= (L + 0.05) / (gelap + 0.05) ? "#fff" : "#1A1400";
+  };
   const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const statusBadge = rec => {
     if (!rec) return `<span class="badge b-mute">Belum mengisi</span>`;
@@ -233,7 +240,7 @@
     const cell = (v, t, dir, suf) => v === null || v === undefined ? `<td class="num muted">–</td>` : `<td class="num"><span class="badge ${c(v, t, dir)}">${suf === "rasio" ? "1:" + fmt(v) : fmt(v) + (suf || "")}</span></td>`;
     return `<div class="tbl-wrap"><table><thead><tr><th>Program studi</th><th class="num">Uji Kompetensi/Try Out<br><small>target ${fmt(T.ukom.target)}%</small></th><th class="num">Tepat waktu<br><small>target ${fmt(T.tepatWaktu.target)}%</small></th>
       <th class="num">Rasio dosen<br><small>target 1:${T.rasio.target}</small></th><th class="num">Bahasa Inggris<br><small>target ${fmt(T.inggris.target)}%</small></th><th class="num">Prestasi<br><small>target ${T.prestasi.target}</small></th><th>Akreditasi</th></tr></thead><tbody>
-      ${rows.map(r => `<tr><td><a href="#/prodi/${r.p.id}">${esc(r.p.nama)}</a></td>${cell(r.m.ukom, T.ukom.target, "naik", "%")}${cell(r.m.tepatWaktu, T.tepatWaktu.target, "naik", "%")}${r.m.rasio === null ? cell(null, T.rasio.target, "turun", "rasio") : `<td class="num"><span class="badge" style="background:${rasioCapaianColor(r.m.rasio)};color:#fff">1:${fmt(r.m.rasio)}${r.m.rasioCapaian !== null ? " (" + r.m.rasioCapaian + "%)" : ""}</span></td>`}${cell(r.m.inggris, T.inggris.target, "naik", "%")}${cell(r.m.prestasi, T.prestasi.target, "naik", "")}<td>${esc(r.m.akreditasi || "–")}</td></tr>`).join("")}
+      ${rows.map(r => `<tr><td><a href="#/prodi/${r.p.id}">${esc(r.p.nama)}</a></td>${cell(r.m.ukom, T.ukom.target, "naik", "%")}${cell(r.m.tepatWaktu, T.tepatWaktu.target, "naik", "%")}${r.m.rasio === null ? cell(null, T.rasio.target, "turun", "rasio") : `<td class="num"><span class="badge" style="background:${rasioCapaianColor(r.m.rasio)};color:${inkOn(rasioCapaianColor(r.m.rasio))}">1:${fmt(r.m.rasio)}${r.m.rasioCapaian !== null ? " (" + r.m.rasioCapaian + "%)" : ""}</span></td>`}${cell(r.m.inggris, T.inggris.target, "naik", "%")}${cell(r.m.prestasi, T.prestasi.target, "naik", "")}<td>${esc(r.m.akreditasi || "–")}</td></tr>`).join("")}
       </tbody></table></div>`;
   }
 
